@@ -9,6 +9,7 @@
 #   ./l2myserver.sh --desktop        add it to the application menu
 #   ./l2myserver.sh --winecfg        Wine settings of this client's prefix
 #   ./l2myserver.sh --reset-prefix   start with a new prefix (old one is kept aside)
+#   ./l2myserver.sh --kill           stop this client (also a stuck start)
 #   ./l2myserver.sh --version
 #
 # Settings (saved per client, used on every start):
@@ -37,7 +38,7 @@
 #        ~/.local/share/umu/      (Steam Linux Runtime, downloaded by umu-run)
 set -euo pipefail
 
-L2LAUNCH_VERSION="1.0.0"
+L2LAUNCH_VERSION="1.0.1"
 
 GE_VER="GE-Proton9-27"
 GE_URL="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${GE_VER}/${GE_VER}.tar.gz"
@@ -234,6 +235,35 @@ get_umu() {
     rm -rf "$tmp"
 }
 
+# ── running instance ────────────────────────────────────────────────────────
+running_pids() {  # umu-run processes started for this client's L2.exe
+    local pid argv0
+    for pid in $(pgrep -f -- "umu-run $EXE" 2>/dev/null); do
+        # only the python process itself, not a shell or grep that has the text
+        argv0=$(tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null | head -n 1)
+        case "$argv0" in *python*) echo "$pid" ;; esac
+    done
+}
+
+kill_client() {
+    local pids proton
+    pids=$(running_pids)
+    proton=$(find_proton || true)
+    if [ -z "$pids" ]; then say "not running"; return 0; fi
+    say "stopping $(echo "$pids" | wc -w) start(s) of this client"
+    if [ -n "$proton" ]; then
+        WINEPREFIX="$PREFIX" "$proton/files/bin/wineserver" -k 2>/dev/null || true
+    fi
+    sleep 2
+    # shellcheck disable=SC2086
+    kill $pids 2>/dev/null || true
+    sleep 1
+    pids=$(running_pids)
+    # shellcheck disable=SC2086
+    [ -z "$pids" ] || kill -9 $pids 2>/dev/null || true
+    say "stopped"
+}
+
 # ── run ─────────────────────────────────────────────────────────────────────
 run_umu() {  # args for umu-run
     local proton; proton=$(find_proton) || die "Proton not found"
@@ -304,10 +334,17 @@ case "${1:-}" in
     --reset-prefix)
         [ -d "$PREFIX" ] && mv "$PREFIX" "$PREFIX.old.$(date +%Y%m%d-%H%M%S)" && say "old prefix moved aside"
         exit 0 ;;
+    --kill)       kill_client; exit 0 ;;
     --winecfg)    check || die "fix the warnings above first"; get_proton; get_umu; run_umu winecfg; exit $? ;;
     "")           ;;
     *)            die "unknown option $1 (see --help)" ;;
 esac
+
+# One start per client: a second start in the same prefix only waits behind the
+# first one (Proton waits for the running wineserver) and looks like a hang.
+if [ -n "$(running_pids)" ]; then
+    die "already running (look on your other workspaces/monitors). To stop it: ./$(basename "$SELF") --kill"
+fi
 
 check || die "fix the warnings above first (./$(basename "$SELF") --check)"
 get_proton

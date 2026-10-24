@@ -100,7 +100,7 @@ L2_HUD=on ./l2myserver.sh
 L2_CLIENT=/path/to/client ./l2myserver.sh     # script not inside the client folder
 ```
 
-Other commands: `--winecfg` (Wine settings of this client's prefix), `--reset-prefix` (fresh prefix, the old one is kept aside), `--version`, `--help`.
+Other commands: `--kill` (stop this client, also a stuck start), `--winecfg` (Wine settings of this client's prefix), `--reset-prefix` (fresh prefix, the old one is kept aside), `--version`, `--help`.
 
 ---
 
@@ -156,6 +156,8 @@ echo 'kernel.apparmor_restrict_unprivileged_userns=0' | sudo tee /etc/sysctl.d/6
 This turns off one of Ubuntu's security hardening options. Only do it if you need it.
 
 **The camera spins by itself.** A gamepad, or something that looks like one (some headsets, drawing tablets), is read as a joystick. In game: Options → turn off **Support Gamepad**. Server owners can ship `UseJoystick=False` in `L2.ini` / `Option.ini`.
+
+**It stays at "starting…" and nothing opens.** The script prints nothing more while the game runs. The game window may simply be on another workspace or monitor. A second start of the same client is refused ("already running"); `--kill` stops the running one, including a stuck start.
 
 **It stopped starting after it worked before.** `--reset-prefix`, then start again. The old prefix is kept as `prefix.old.<date>`.
 
