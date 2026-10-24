@@ -9,16 +9,19 @@
 #   ./l2myserver.sh --desktop        add it to the application menu
 #   ./l2myserver.sh --winecfg        Wine settings of this client's prefix
 #   ./l2myserver.sh --reset-prefix   start with a new prefix (old one is kept aside)
-#   ./l2myserver.sh --kill           stop this client (also a stuck start)
-#   ./l2myserver.sh --box 2          a 2nd window of the same client (multibox),
-#                                    own prefix; works with every command:
-#                                    --box 2 --kill, --box 3 --desktop, ...
+#   ./l2myserver.sh --kill           stop all windows of this client (also stuck starts)
+#
+# More windows (multibox): start it again — while window 1 runs, the next start
+# opens window 2, then 3 ... (each with its own prefix). Same from the menu entry.
+#   ./l2myserver.sh --box 2          exactly window 2 (--box 2 --kill, --box 2 --desktop ...)
+#   ./l2myserver.sh --multi off      only one window: a 2nd start says "already running"
 #   ./l2myserver.sh --version
 #
 # Settings (saved per client, used on every start):
 #   --fps 144 | --fps off            frame limit, default 60
 #   --hud on|off                     fps counter in the corner (DXVK HUD)
 #   --mangohud on|off                MangoHud overlay (if installed)
+#   --multi on|off                   next start opens another window (default on)
 #   --title "My Server"              name in messages and in the menu
 #   --settings                       show the saved settings
 #
@@ -41,7 +44,7 @@
 #        ~/.local/share/umu/      (Steam Linux Runtime, downloaded by umu-run)
 set -euo pipefail
 
-L2LAUNCH_VERSION="1.1.0"
+L2LAUNCH_VERSION="1.2.0"
 
 GE_VER="GE-Proton9-27"
 GE_URL="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${GE_VER}/${GE_VER}.tar.gz"
@@ -65,8 +68,9 @@ DATA="$SHARE/$NAME"                     # prefix + log of this client
 # --box N (2-9): another window of the same client. Each box needs its own
 # Wine prefix — in one prefix a 2nd start only waits behind the 1st.
 BOX=""
+BOX_SET=0
 if [ "${1:-}" = "--box" ]; then
-    case "${2:-}" in [2-9]) BOX="$2" ;; *) echo "use --box <2-9>" >&2; exit 1 ;; esac
+    case "${2:-}" in [2-9]) BOX="$2"; BOX_SET=1 ;; *) echo "use --box <2-9>" >&2; exit 1 ;; esac
     shift 2
 fi
 PREFIX="$DATA/prefix${BOX:+-box$BOX}"
@@ -113,9 +117,18 @@ settings() {
     echo "  FPS      = $([ "$(fps_value "$fps")" = 0 ] && echo "off (no limit)" || echo "$fps")"
     echo "  HUD      = $(conf_get HUD off)"
     echo "  MANGOHUD = $(conf_get MANGOHUD off)"
+    echo "  MULTI    = $(conf_get MULTI on)   (next start opens another window)"
 }
 
-LABEL="$(conf_get TITLE "$BASE")${BOX:+ #$BOX}"
+TITLE="$(conf_get TITLE "$BASE")"
+
+use_box() {  # "" = window 1, 2-9 = boxes
+    BOX="$1"
+    PREFIX="$DATA/prefix${BOX:+-box$BOX}"
+    LOG="$DATA/last-run${BOX:+-box$BOX}.log"
+    LABEL="$TITLE${BOX:+ #$BOX}"
+}
+use_box "$BOX"
 
 find_exe() {  # system/L2.exe, any case (some clients ship l2.exe)
     local f
@@ -246,34 +259,41 @@ get_umu() {
 }
 
 # ── running instance ────────────────────────────────────────────────────────
-running_pids() {  # umu-run processes that use this client's (box's) prefix
-    local pid argv0
+running_pids() {  # umu-run processes that use a prefix (default: this box's)
+    local want="${1:-$PREFIX}" pid argv0
     for pid in $(pgrep -f -- "umu-run" 2>/dev/null); do
         # only the python process itself, not a shell or grep that has the text
         argv0=$(tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null | head -n 1)
         case "$argv0" in *python*) ;; *) continue ;; esac
-        tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null | grep -qxF "WINEPREFIX=$PREFIX" && echo "$pid"
+        tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null | grep -qxF "WINEPREFIX=$want" && echo "$pid"
     done
     return 0
 }
 
-kill_client() {
-    local pids proton
-    pids=$(running_pids)
+kill_client() {  # this box with --box N, otherwise every window of the client
+    local boxes b any=0 pids proton
     proton=$(find_proton || true)
-    if [ -z "$pids" ]; then say "not running"; return 0; fi
-    say "stopping $(echo "$pids" | wc -w) start(s) of this client"
-    if [ -n "$proton" ]; then
-        WINEPREFIX="$PREFIX" "$proton/files/bin/wineserver" -k 2>/dev/null || true
-    fi
-    sleep 2
-    # shellcheck disable=SC2086
-    kill $pids 2>/dev/null || true
-    sleep 1
-    pids=$(running_pids)
-    # shellcheck disable=SC2086
-    [ -z "$pids" ] || kill -9 $pids 2>/dev/null || true
-    say "stopped"
+    if [ "$BOX_SET" = 1 ]; then boxes="$BOX"; else boxes="1 2 3 4 5 6 7 8 9"; fi
+    for b in $boxes; do
+        [ "$b" = 1 ] && b=""
+        use_box "$b"
+        pids=$(running_pids)
+        [ -n "$pids" ] || continue
+        any=1
+        say "stopping"
+        if [ -n "$proton" ]; then
+            WINEPREFIX="$PREFIX" "$proton/files/bin/wineserver" -k 2>/dev/null || true
+        fi
+        sleep 2
+        # shellcheck disable=SC2086
+        kill $pids 2>/dev/null || true
+        sleep 1
+        pids=$(running_pids)
+        # shellcheck disable=SC2086
+        [ -z "$pids" ] || kill -9 $pids 2>/dev/null || true
+    done
+    [ "$BOX_SET" = 1 ] || use_box ""
+    if [ "$any" = 1 ]; then say "stopped"; else say "not running"; fi
 }
 
 # ── run ─────────────────────────────────────────────────────────────────────
@@ -310,7 +330,8 @@ run_umu() {  # args for umu-run
 
 desktop() {
     local app="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
-    local icon="$CLIENT/$NAME.png"
+    local icon="$CLIENT/$NAME$BOX.png"           # l2myserver2.png for --box 2 ...
+    [ -f "$icon" ] || icon="$CLIENT/$NAME.png"
     [ -f "$icon" ] || icon="applications-games"
     mkdir -p "$app"
     cat > "$app/$NAME$BOX.desktop" <<EOF
@@ -333,12 +354,12 @@ case "${1:-}" in
     --title)
         v=$(printf '%s' "${2:-}" | tr -cd 'A-Za-z0-9 ._-' | cut -c1-40)
         [ -n "$v" ] || die "use --title \"My Server\" (letters, digits, space . _ -)"
-        conf_set TITLE "$v"; LABEL="$v"; settings; exit 0 ;;
+        conf_set TITLE "$v"; TITLE="$v"; use_box "$BOX"; settings; exit 0 ;;
     --settings)   settings; exit 0 ;;
     --fps)
         v=$(fps_value "${2:-}"); [ -n "$v" ] || die "use --fps <15-1000> or --fps off"
         conf_set FPS "$([ "$v" = 0 ] && echo off || echo "$v")"; settings; exit 0 ;;
-    --hud|--mangohud)
+    --hud|--mangohud|--multi)
         v=$(onoff "${2:-}"); [ -n "$v" ] || die "use $1 on or $1 off"
         k=${1#--}; conf_set "${k^^}" "$v"; settings; exit 0 ;;
     --check)      check && say "all checks OK" || die "fix the warnings above first"; exit 0 ;;
@@ -352,10 +373,18 @@ case "${1:-}" in
     *)            die "unknown option $1 (see --help)" ;;
 esac
 
-# One start per client: a second start in the same prefix only waits behind the
+# One start per prefix: a second start in the same prefix only waits behind the
 # first one (Proton waits for the running wineserver) and looks like a hang.
+# Without --box (and MULTI on) the next free window is used instead.
 if [ -n "$(running_pids)" ]; then
-    die "already running (look on your other workspaces/monitors). To stop it: ./$(basename "$SELF")${BOX:+ --box $BOX} --kill — another window: --box <2-9>"
+    if [ "$BOX_SET" = 1 ] || [ "$(onoff "$(conf_get MULTI on)")" != on ]; then
+        die "already running (look on your other workspaces/monitors). To stop it: ./$(basename "$SELF")${BOX:+ --box $BOX} --kill"
+    fi
+    for b in 2 3 4 5 6 7 8 9 none; do
+        [ "$b" = none ] && die "all 9 windows are running"
+        [ -z "$(running_pids "$DATA/prefix-box$b")" ] && { use_box "$b"; break; }
+    done
+    [ -d "$PREFIX" ] || say "window $BOX: first start makes its own Wine prefix, about a minute"
 fi
 
 check || die "fix the warnings above first (./$(basename "$SELF") --check)"

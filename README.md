@@ -79,18 +79,20 @@ Only letters and digits count in the name (`l2-dion.sh` becomes `l2dion`).
 
 ## Several windows of one client (multibox)
 
+**Just start it again.** While window 1 runs, the next start — from the terminal or the same menu entry — opens window 2, then 3, up to 9. Like starting `L2.exe` twice on Windows.
+
 ```bash
-./l2myserver.sh                  # window 1
-./l2myserver.sh --box 2          # window 2
-./l2myserver.sh --box 3          # window 3 (up to --box 9)
+./l2myserver.sh --kill           # stop all windows
 ./l2myserver.sh --box 2 --kill   # stop only window 2
-./l2myserver.sh --box 2 --desktop
+./l2myserver.sh --box 2          # start exactly window 2
+./l2myserver.sh --multi off      # only one window: a 2nd start says "already running"
 ```
 
-- Every box has its **own Wine prefix** (`~/.local/share/<name>/prefix-box2`, a few hundred MB, the first start of a box takes a minute). In one shared prefix a second start would only wait behind the first one.
-- Settings (fps, HUD, title) are shared by all boxes.
+- Every window has its **own Wine prefix** (`~/.local/share/<name>/prefix-box2`, a few hundred MB, the first start of a new window takes a minute). In one shared prefix a second start would only wait behind the first one.
+- Settings (fps, HUD, title) are shared by all windows.
 - Window class: `steam_app_<name>2`, `steam_app_<name>3`… — window rules should match `^steam_app_<name>[0-9]*$`.
 - Each window needs its **own account** (one account can't be online twice), and the **server** decides how many windows per PC it allows.
+- Want separate menu entries anyway? `--box 2 --desktop` makes "<title> #2" (icon `l2myserver2.png` if it exists).
 
 ---
 
@@ -103,6 +105,7 @@ Settings are saved per client and used on every start:
 ./l2myserver.sh --fps off          # no frame limit
 ./l2myserver.sh --hud on           # fps counter in the top-left corner
 ./l2myserver.sh --mangohud on      # MangoHud overlay instead (if installed)
+./l2myserver.sh --multi off        # one window only (default on: next start = next window)
 ./l2myserver.sh --title "My Server"
 ./l2myserver.sh --settings         # show what is set
 ```
@@ -117,7 +120,7 @@ L2_HUD=on ./l2myserver.sh
 L2_CLIENT=/path/to/client ./l2myserver.sh     # script not inside the client folder
 ```
 
-Other commands: `--box N` (another window, see above), `--kill` (stop this client, also a stuck start), `--winecfg` (Wine settings of this client's prefix), `--reset-prefix` (fresh prefix, the old one is kept aside), `--version`, `--help`.
+Other commands: `--box N` (exactly window N, see above), `--kill` (stop all windows, also stuck starts), `--winecfg` (Wine settings of this client's prefix), `--reset-prefix` (fresh prefix, the old one is kept aside), `--version`, `--help`.
 
 ---
 
@@ -174,7 +177,7 @@ This turns off one of Ubuntu's security hardening options. Only do it if you nee
 
 **The camera spins by itself.** A gamepad, or something that looks like one (some headsets, drawing tablets), is read as a joystick. In game: Options → turn off **Support Gamepad**. Server owners can ship `UseJoystick=False` in `L2.ini` / `Option.ini`.
 
-**It stays at "starting…" and nothing opens.** The script prints nothing more while the game runs. The game window may simply be on another workspace or monitor. A second start of the same client is refused ("already running"); `--kill` stops the running one, including a stuck start.
+**It stays at "starting…" and nothing opens.** The script prints nothing more while the game runs. The game window may simply be on another workspace or monitor. Starting it again opens a second window (see multibox); `--kill` stops all of them, including a stuck start.
 
 **It stopped starting after it worked before.** `--reset-prefix`, then start again. The old prefix is kept as `prefix.old.<date>`.
 

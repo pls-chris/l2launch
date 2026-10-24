@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.0 — 2026-10-24
+
+- Start it again (terminal or menu entry) while it runs → the next window opens (box 2, 3 ... up to 9), like on Windows. `--multi off` brings back "already running"
+- `--kill` without `--box` stops every window of the client; `--box N --kill` only that one
+
+## 1.1.1 — 2026-10-24
+
+- `--box N --desktop` uses `<name>N.png` as icon if it exists (own icon per box), else `<name>.png`
+
 ## 1.1.0 — 2026-10-24
 
 - `--box N` (2-9): more windows of the same client (multibox). Each box has its own Wine prefix (`prefix-boxN`), log and window class (`steam_app_<name>N`); settings are shared
