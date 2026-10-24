@@ -10,6 +10,9 @@
 #   ./l2myserver.sh --winecfg        Wine settings of this client's prefix
 #   ./l2myserver.sh --reset-prefix   start with a new prefix (old one is kept aside)
 #   ./l2myserver.sh --kill           stop this client (also a stuck start)
+#   ./l2myserver.sh --box 2          a 2nd window of the same client (multibox),
+#                                    own prefix; works with every command:
+#                                    --box 2 --kill, --box 3 --desktop, ...
 #   ./l2myserver.sh --version
 #
 # Settings (saved per client, used on every start):
@@ -38,7 +41,7 @@
 #        ~/.local/share/umu/      (Steam Linux Runtime, downloaded by umu-run)
 set -euo pipefail
 
-L2LAUNCH_VERSION="1.0.1"
+L2LAUNCH_VERSION="1.1.0"
 
 GE_VER="GE-Proton9-27"
 GE_URL="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${GE_VER}/${GE_VER}.tar.gz"
@@ -59,9 +62,16 @@ LABEL="$BASE"            # replaced by the saved --title below
 SHARE="${XDG_DATA_HOME:-$HOME/.local/share}"
 TOOLS="$SHARE/l2launch"                 # Proton + umu, shared by every copy
 DATA="$SHARE/$NAME"                     # prefix + log of this client
-PREFIX="$DATA/prefix"
+# --box N (2-9): another window of the same client. Each box needs its own
+# Wine prefix — in one prefix a 2nd start only waits behind the 1st.
+BOX=""
+if [ "${1:-}" = "--box" ]; then
+    case "${2:-}" in [2-9]) BOX="$2" ;; *) echo "use --box <2-9>" >&2; exit 1 ;; esac
+    shift 2
+fi
+PREFIX="$DATA/prefix${BOX:+-box$BOX}"
 UMU="$TOOLS/umu-$UMU_VER/umu-run"
-LOG="$DATA/last-run.log"
+LOG="$DATA/last-run${BOX:+-box$BOX}.log"
 CONF="${XDG_CONFIG_HOME:-$HOME/.config}/$NAME/launcher.conf"
 # settings file of pre-1.0 versions (then called l2nostos.sh)
 [ -f "$CONF" ] || [ ! -f "$(dirname "$CONF")/l2nostos.conf" ] || mv "$(dirname "$CONF")/l2nostos.conf" "$CONF"
@@ -105,7 +115,7 @@ settings() {
     echo "  MANGOHUD = $(conf_get MANGOHUD off)"
 }
 
-LABEL="$(conf_get TITLE "$BASE")"
+LABEL="$(conf_get TITLE "$BASE")${BOX:+ #$BOX}"
 
 find_exe() {  # system/L2.exe, any case (some clients ship l2.exe)
     local f
@@ -236,13 +246,15 @@ get_umu() {
 }
 
 # ── running instance ────────────────────────────────────────────────────────
-running_pids() {  # umu-run processes started for this client's L2.exe
+running_pids() {  # umu-run processes that use this client's (box's) prefix
     local pid argv0
-    for pid in $(pgrep -f -- "umu-run $EXE" 2>/dev/null); do
+    for pid in $(pgrep -f -- "umu-run" 2>/dev/null); do
         # only the python process itself, not a shell or grep that has the text
         argv0=$(tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null | head -n 1)
-        case "$argv0" in *python*) echo "$pid" ;; esac
+        case "$argv0" in *python*) ;; *) continue ;; esac
+        tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null | grep -qxF "WINEPREFIX=$PREFIX" && echo "$pid"
     done
+    return 0
 }
 
 kill_client() {
@@ -267,7 +279,7 @@ kill_client() {
 # ── run ─────────────────────────────────────────────────────────────────────
 run_umu() {  # args for umu-run
     local proton; proton=$(find_proton) || die "Proton not found"
-    export GAMEID="umu-$NAME" STORE="none"     # window class: steam_app_$NAME
+    export GAMEID="umu-$NAME$BOX" STORE="none"   # window class: steam_app_$NAME$BOX
     export WINEPREFIX="$PREFIX" PROTONPATH="$proton"
     export PROTON_LOG=0 WINEDEBUG="${WINEDEBUG:--all}"
 
@@ -301,18 +313,18 @@ desktop() {
     local icon="$CLIENT/$NAME.png"
     [ -f "$icon" ] || icon="applications-games"
     mkdir -p "$app"
-    cat > "$app/$NAME.desktop" <<EOF
+    cat > "$app/$NAME$BOX.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=$LABEL
 Comment=Lineage II client — $LABEL
-Exec="$SELF"
+Exec="$SELF"${BOX:+ --box $BOX}
 Path=$CLIENT
 Icon=$icon
 Terminal=false
 Categories=Game;
 EOF
-    say "menu entry: $app/$NAME.desktop"
+    say "menu entry: $app/$NAME$BOX.desktop"
 }
 
 case "${1:-}" in
@@ -343,7 +355,7 @@ esac
 # One start per client: a second start in the same prefix only waits behind the
 # first one (Proton waits for the running wineserver) and looks like a hang.
 if [ -n "$(running_pids)" ]; then
-    die "already running (look on your other workspaces/monitors). To stop it: ./$(basename "$SELF") --kill"
+    die "already running (look on your other workspaces/monitors). To stop it: ./$(basename "$SELF")${BOX:+ --box $BOX} --kill — another window: --box <2-9>"
 fi
 
 check || die "fix the warnings above first (./$(basename "$SELF") --check)"

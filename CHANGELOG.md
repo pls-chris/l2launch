@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0 — 2026-10-24
+
+- `--box N` (2-9): more windows of the same client (multibox). Each box has its own Wine prefix (`prefix-boxN`), log and window class (`steam_app_<name>N`); settings are shared
+- The "already running" check now looks at the prefix, so boxes and other clients don't block each other
+
 ## 1.0.1 — 2026-10-24
 
 - Refuses a second start of the same client: Proton waited behind the running one, which looked like a hang

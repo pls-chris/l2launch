@@ -77,6 +77,23 @@ Only letters and digits count in the name (`l2-dion.sh` becomes `l2dion`).
 
 ---
 
+## Several windows of one client (multibox)
+
+```bash
+./l2myserver.sh                  # window 1
+./l2myserver.sh --box 2          # window 2
+./l2myserver.sh --box 3          # window 3 (up to --box 9)
+./l2myserver.sh --box 2 --kill   # stop only window 2
+./l2myserver.sh --box 2 --desktop
+```
+
+- Every box has its **own Wine prefix** (`~/.local/share/<name>/prefix-box2`, a few hundred MB, the first start of a box takes a minute). In one shared prefix a second start would only wait behind the first one.
+- Settings (fps, HUD, title) are shared by all boxes.
+- Window class: `steam_app_<name>2`, `steam_app_<name>3`… — window rules should match `^steam_app_<name>[0-9]*$`.
+- Each window needs its **own account** (one account can't be online twice), and the **server** decides how many windows per PC it allows.
+
+---
+
 ## Settings
 
 Settings are saved per client and used on every start:
@@ -100,7 +117,7 @@ L2_HUD=on ./l2myserver.sh
 L2_CLIENT=/path/to/client ./l2myserver.sh     # script not inside the client folder
 ```
 
-Other commands: `--kill` (stop this client, also a stuck start), `--winecfg` (Wine settings of this client's prefix), `--reset-prefix` (fresh prefix, the old one is kept aside), `--version`, `--help`.
+Other commands: `--box N` (another window, see above), `--kill` (stop this client, also a stuck start), `--winecfg` (Wine settings of this client's prefix), `--reset-prefix` (fresh prefix, the old one is kept aside), `--version`, `--help`.
 
 ---
 
@@ -161,11 +178,11 @@ This turns off one of Ubuntu's security hardening options. Only do it if you nee
 
 **It stopped starting after it worked before.** `--reset-prefix`, then start again. The old prefix is kept as `prefix.old.<date>`.
 
-**Hyprland: a small empty window stays on screen.** That's the client's splash window: empty title, class `steam_app_<name>`. The game window's title is `Lineage II`. Lua config:
+**Hyprland: a small empty window stays on screen.** That's the client's splash window: empty title, class `steam_app_<name>` (`steam_app_<name>2`… for boxes). The game window's title is `Lineage II`. Lua config:
 ```lua
 hl.window_rule({
     name      = "l2-splash",
-    match     = { class = "^steam_app_l2myserver$", title = "^$" },
+    match     = { class = "^steam_app_l2myserver[0-9]*$", title = "^$" },
     workspace = "special:l2splash silent",
 })
 ```
