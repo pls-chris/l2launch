@@ -7,9 +7,10 @@ Start a **Lineage II** client on Linux **without Steam**, on any distro, with on
 - Proton runs inside Valve's **Steam Linux Runtime** container, so it behaves the same on Arch, Debian/Ubuntu, Fedora, openSUSE and SteamOS.
 - **Own Wine prefix per client.** Rename the script and you have a second, separate client.
 - **Frame limit** (default 60), fps counter, MangoHud, application-menu entry.
+- **Colour fix** (optional, vkBasalt): more saturation and contrast plus light sharpening for the pale look of old L2 clients, one key switches it on/off in game.
 - **`--check`** tells you what your PC is missing before anything is downloaded.
 
-Written for the L2Nostos server (Classic 2.7 Antharas, protocol 140), usable for other L2 clients of the same generation.
+Written for the L2Nostos server (Classic 2.0 Saviors, First Age client), usable for other L2 clients of the same generation.
 
 ---
 
@@ -46,6 +47,7 @@ For a menu icon, put a PNG with the same name next to the script (`l2myserver.pn
 | User namespaces allowed | the runtime container needs them | default on most distros, see Troubleshooting for Ubuntu |
 | ~3 GB free disk | Proton + runtime + Wine prefix | in your home folder |
 | Internet on the first start | downloads | — |
+| *vkBasalt, 64- and 32-bit (optional)* | only for the colour fix `--vkbasalt on` | see below; `--check` shows which one you have |
 
 **32-bit Vulkan driver.** Every distro has the normal 64-bit one. The 32-bit one is what most people miss:
 
@@ -56,6 +58,16 @@ For a menu icon, put a PNG with the same name next to the script (`l2myserver.pn
 | Fedora | `mesa-vulkan-drivers.i686` | same | `xorg-x11-drv-nvidia-libs.i686` (RPM Fusion) |
 
 (On Arch the `lib32-` packages need the `[multilib]` repo.)
+
+**vkBasalt (optional, only for `--vkbasalt on`).** A Vulkan layer that changes the picture after the game draws it. Install both bitnesses: the game uses the one of `L2.exe` (most L2 clients are **32-bit**), and on Arch the 32-bit package needs the 64-bit one anyway.
+
+| Distro | 64-bit | 32-bit |
+|---|---|---|
+| Arch, CachyOS, Manjaro, EndeavourOS (AUR) | `vkbasalt` | `lib32-vkbasalt` |
+| Debian, Ubuntu, Mint, Pop!_OS | `sudo apt install vkbasalt` | `sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install vkbasalt:i386` |
+| Fedora | `sudo dnf install vkBasalt` | `sudo dnf install vkBasalt.i686` |
+
+`--check` prints `vkBasalt layer: 64-bit found/missing, 32-bit found/missing` and which one your `L2.exe` needs. Without vkBasalt everything works, just without the colour fix.
 
 Works on: Arch/CachyOS, Debian/Ubuntu, Fedora, openSUSE, SteamOS and other immutable distros. Nothing is installed system-wide, and no root is needed. It does **not** work on ARM PCs or on musl distros (Alpine).
 
@@ -106,17 +118,25 @@ Settings are saved per client and used on every start:
 ./l2myserver.sh --hud on           # fps counter in the top-left corner
 ./l2myserver.sh --mangohud on      # MangoHud overlay instead (if installed)
 ./l2myserver.sh --multi off        # one window only (default on: next start = next window)
+./l2myserver.sh --vkbasalt on      # colour fix (needs vkBasalt, see "What your PC needs")
+./l2myserver.sh --saturation 1.05  # colour, 1.0 = unchanged (0.5-2.0), default 1.05
+./l2myserver.sh --contrast 1.05    # contrast, 1.0 = unchanged (0.5-2.0), default 1.05
+./l2myserver.sh --sharpness 0.3    # sharpening (AMD CAS), 0 = off (0-1), default 0.3
+./l2myserver.sh --vkbasalt-key Pause   # key that switches the effect on/off, default Scroll_Lock
 ./l2myserver.sh --title "My Server"
 ./l2myserver.sh --settings         # show what is set
 ```
 
 Why 60 by default: L2 does not need more, and without a limit the GPU can run at full power even in the character select screen (heat, fan noise, battery on laptops).
 
+**Colour fix.** Old L2 clients look pale on modern screens. With `--vkbasalt on` the script writes a small colour table (saturation + contrast) and a vkBasalt config next to the settings, and starts the game with the layer on. Press **Scroll Lock** in game to compare with and without (Home is a bad key: L2 uses it for the camera). Sharpening alone already makes textures look crisper, so the game looks better even at saturation 1.0 and contrast 1.0; `--sharpness 0` turns it off. If all three are neutral (1.0 / 1.0 / 0), vkBasalt is not loaded at all.
+
 For one start only:
 
 ```bash
 L2_FPS=off ./l2myserver.sh
 L2_HUD=on ./l2myserver.sh
+L2_VKBASALT=off ./l2myserver.sh               # once without the colour fix
 L2_CLIENT=/path/to/client ./l2myserver.sh     # script not inside the client folder
 ```
 
@@ -158,6 +178,7 @@ l2myserver.sh
 | `~/.local/share/<name>/last-run.log` | log of the last start | small |
 | `~/.local/share/umu` | Steam Linux Runtime (shared with other umu games) | under 1 GB |
 | `~/.config/<name>/launcher.conf` | settings of one client | tiny |
+| `~/.config/<name>/vkBasalt.conf`, `colour.cube` | colour fix (written on every start with `--vkbasalt on`) | tiny |
 | `~/.local/share/applications/<name>.desktop` | menu entry (only with `--desktop`) | tiny |
 
 The script never changes the client folder. The game writes its own files there (options, key bindings) like on Windows.
@@ -176,6 +197,8 @@ echo 'kernel.apparmor_restrict_unprivileged_userns=0' | sudo tee /etc/sysctl.d/6
 This turns off one of Ubuntu's security hardening options. Only do it if you need it.
 
 **The camera spins by itself.** A gamepad, or something that looks like one (some headsets, drawing tablets), is read as a joystick. In game: Options → turn off **Support Gamepad**. Server owners can ship `UseJoystick=False` in `L2.ini` / `Option.ini`.
+
+**Colours look pale / washed out.** `--vkbasalt on` (see Settings). If nothing changes in game, run `--check`: most of the time the **32-bit** vkBasalt package is missing (`lib32-vkbasalt`, `vkbasalt:i386`, `vkBasalt.i686`). Scroll Lock switches the effect, so press it once in case it is just off.
 
 **It stays at "starting…" and nothing opens.** The script prints nothing more while the game runs. The game window may simply be on another workspace or monitor. Starting it again opens a second window (see multibox); `--kill` stops all of them, including a stuck start.
 
@@ -222,6 +245,7 @@ Test a new Proton with real clients first — the Classic clients we tested cras
 
 - [GE-Proton](https://github.com/GloriousEggroll/proton-ge-custom) by GloriousEggroll
 - [umu-launcher](https://github.com/Open-Wine-Components/umu-launcher) by Open Wine Components
+- [vkBasalt](https://github.com/DadSchoorse/vkBasalt) by DadSchoorse (optional colour fix)
 - [Steam Linux Runtime](https://gitlab.steamos.cloud/steamrt/steam-runtime-tools) and [Proton](https://github.com/ValveSoftware/Proton) by Valve, [DXVK](https://github.com/doitsujin/dxvk) by Philip Rebohle
 
 Not affiliated with NCSOFT. Lineage II is a trademark of NCSOFT Corporation. This repository contains no game files.

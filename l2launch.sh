@@ -21,6 +21,12 @@
 #   --fps 144 | --fps off            frame limit, default 60
 #   --hud on|off                     fps counter in the corner (DXVK HUD)
 #   --mangohud on|off                MangoHud overlay (if installed)
+#   --vkbasalt on|off                colour fix: saturation/contrast + sharpening (vkBasalt layer,
+#                                    install it yourself, 64- and 32-bit; Scroll Lock = on/off in game)
+#   --vkbasalt-key Scroll_Lock       key that switches the effect on/off (X11 key name, e.g. Pause)
+#   --saturation 1.05                vkBasalt colour, 1.0 = unchanged (0.5-2.0), default 1.05
+#   --contrast 1.05                  vkBasalt contrast, 1.0 = unchanged (0.5-2.0), default 1.05
+#   --sharpness 0.3                  vkBasalt sharpening (CAS), 0 = off (0-1), default 0.3
 #   --multi on|off                   next start opens another window (default on)
 #   --title "My Server"              name in messages and in the menu
 #   --settings                       show the saved settings
@@ -37,14 +43,14 @@
 # launcher/updater is not used.
 #
 # Environment variables override the settings for one start:
-#   L2_FPS=off  L2_HUD=on  L2_MANGOHUD=on  L2_CLIENT=/path/to/client
+#   L2_FPS=off  L2_HUD=on  L2_MANGOHUD=on  L2_VKBASALT=on  L2_CLIENT=/path/to/client
 #
 # Files: ~/.local/share/l2launch/ (Proton, umu — shared)
 #        ~/.local/share/<name>/   (prefix, last-run.log)
 #        ~/.local/share/umu/      (Steam Linux Runtime, downloaded by umu-run)
 set -euo pipefail
 
-L2LAUNCH_VERSION="1.3.0"
+L2LAUNCH_VERSION="1.4.0"
 
 GE_VER="GE-Proton9-27"
 GE_URL="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${GE_VER}/${GE_VER}.tar.gz"
@@ -94,12 +100,22 @@ conf_get() {  # key default — plain KEY=value lines, the file is never execute
 
 conf_set() {  # key value
     mkdir -p "$(dirname "$CONF")"
-    [ -f "$CONF" ] || printf '# l2launch settings for %s — change with %s --fps / --hud / --mangohud / --title\n' "$NAME" "$(basename "$SELF")" > "$CONF"
+    [ -f "$CONF" ] || printf '# l2launch settings for %s — change with %s --fps / --hud / --mangohud / --vkbasalt / --saturation / --contrast / --sharpness / --title\n' "$NAME" "$(basename "$SELF")" > "$CONF"
     if grep -q "^$1=" "$CONF"; then sed -i "s/^$1=.*/$1=$2/" "$CONF"; else echo "$1=$2" >> "$CONF"; fi
 }
 
 onoff() {  # normalise on/off/1/0/yes/no -> on|off, empty = invalid
     case "${1,,}" in on|1|yes|true) echo on ;; off|0|no|false) echo off ;; *) echo "" ;; esac
+}
+
+ratio_value() {  # 0.5-2.0 with up to 2 decimals -> normalised, empty = invalid
+    [[ "$1" =~ ^[0-9]+(\.[0-9]{1,2})?$ ]] || { echo ""; return; }
+    awk -v v="$1" 'BEGIN { if (v >= 0.5 && v <= 2.0) printf "%.2f\n", v }'
+}
+
+sharp_value() {  # 0-1 with up to 2 decimals -> normalised, empty = invalid
+    [[ "$1" =~ ^[0-9]+(\.[0-9]{1,2})?$ ]] || { echo ""; return; }
+    awk -v v="$1" 'BEGIN { if (v >= 0 && v <= 1) printf "%.2f\n", v }'
 }
 
 fps_value() {  # -> number, 0 = no limit, empty = invalid
@@ -117,6 +133,7 @@ settings() {
     echo "  FPS      = $([ "$(fps_value "$fps")" = 0 ] && echo "off (no limit)" || echo "$fps")"
     echo "  HUD      = $(conf_get HUD off)"
     echo "  MANGOHUD = $(conf_get MANGOHUD off)"
+    echo "  VKBASALT = $(conf_get VKBASALT off)   (saturation $(conf_get SATURATION 1.05), contrast $(conf_get CONTRAST 1.05), sharpness $(conf_get SHARPNESS 0.3), key $(conf_get VKBKEY Scroll_Lock))"
     echo "  MULTI    = $(conf_get MULTI on)   (next start opens another window)"
 }
 
@@ -204,6 +221,23 @@ check() {
         else
             warn "  Arch/CachyOS: vulkan-radeon (AMD), vulkan-intel (Intel), nvidia-utils (NVIDIA)"
             warn "  Debian/Ubuntu: mesa-vulkan-drivers    Fedora: mesa-vulkan-drivers"
+        fi
+    fi
+
+    # vkBasalt (optional colour fix): the layer must exist in the bitness of L2.exe
+    local vkb; vkb=$(onoff "${L2_VKBASALT:-$(conf_get VKBASALT off)}")
+    if [ "${CHECK_ONLY:-0}" = 1 ] || [ "$vkb" = on ]; then
+        local b64=missing b32=missing need="${bits:-32}"
+        vkb_has 64 && b64=found
+        vkb_has 32 && b32=found
+        [ "${CHECK_ONLY:-0}" = 1 ] && say "vkBasalt layer: 64-bit $b64, 32-bit $b32 (setting --vkbasalt $vkb; L2.exe needs the ${need}-bit one)"
+        if ! vkb_has "$need"; then
+            if [ "$vkb" = on ]; then
+                warn "--vkbasalt is on, but the ${need}-bit vkBasalt layer is missing — colours stay unchanged. Install:"
+                vkb_hint "$need"
+            elif [ "${CHECK_ONLY:-0}" = 1 ]; then
+                say "  (only needed for --vkbasalt on — install the ${need}-bit vkBasalt package for it)"
+            fi
         fi
     fi
 
@@ -300,6 +334,61 @@ kill_client() {  # this box with --box N, otherwise every window of the client
     if [ "$any" = 1 ]; then say "stopped"; else say "not running"; fi
 }
 
+# ── vkBasalt colour fix ─────────────────────────────────────────────────────
+vkb_has() {  # bits — vkBasalt Vulkan layer (json + library) of this bitness installed?
+    local json lib d
+    for json in /usr/share/vulkan/implicit_layer.d/vkBasalt*.json /etc/vulkan/implicit_layer.d/vkBasalt*.json \
+                /usr/local/share/vulkan/implicit_layer.d/vkBasalt*.json \
+                "${XDG_DATA_HOME:-$HOME/.local/share}"/vulkan/implicit_layer.d/vkBasalt*.json; do
+        [ -f "$json" ] || continue
+        lib=$(sed -n 's/.*"library_path"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$json" | head -n 1)
+        [ -n "$lib" ] || continue
+        if [ "${lib#/}" != "$lib" ]; then
+            [ -f "$lib" ] && [ "$(elf_bits "$lib")" = "$1" ] && return 0
+        else  # bare name: the Vulkan loader looks in the library folders of its own bitness
+            for d in /usr/lib /usr/lib32 /usr/lib64 /usr/lib/x86_64-linux-gnu /usr/lib/i386-linux-gnu \
+                     /usr/local/lib /usr/local/lib32 /usr/local/lib64; do
+                [ -f "$d/$lib" ] && [ "$(elf_bits "$d/$lib")" = "$1" ] && return 0
+            done
+        fi
+    done
+    return 1
+}
+
+vkb_hint() {  # bits — how to install vkBasalt
+    if [ "$1" = 32 ]; then
+        warn "  Arch/CachyOS (AUR): lib32-vkbasalt    Debian/Ubuntu: dpkg --add-architecture i386 && apt install vkbasalt:i386"
+        warn "  Fedora: vkBasalt.i686    (the 64-bit package too: vkbasalt / vkBasalt)"
+    else
+        warn "  Arch/CachyOS (AUR): vkbasalt    Debian/Ubuntu: apt install vkbasalt    Fedora: dnf install vkBasalt"
+    fi
+}
+
+vkb_prepare() {  # writes vkBasalt.conf + a colour LUT next to the settings, prints the conf path
+    local dir sat con shp key
+    dir="$(dirname "$CONF")"; mkdir -p "$dir"
+    key=$(conf_get VKBKEY Scroll_Lock); [[ "$key" =~ ^[A-Za-z0-9_]+$ ]] || key=Scroll_Lock
+    sat=$(ratio_value "$(conf_get SATURATION 1.05)"); [ -n "$sat" ] || sat=1.05
+    con=$(ratio_value "$(conf_get CONTRAST 1.05)");   [ -n "$con" ] || con=1.05
+    shp=$(sharp_value "$(conf_get SHARPNESS 0.3)");   [ -n "$shp" ] || shp=0.30
+    local fx=""
+    [ "$sat" = 1.00 ] && [ "$con" = 1.00 ] || fx="lut"
+    [ "$shp" = 0.00 ] || fx="${fx:+$fx:}cas"
+    [ -n "$fx" ] || return 1          # everything neutral -> no effect at all
+    # 17x17x17 3D LUT: contrast around mid-grey, then saturation around Rec.709 luma
+    awk -v s="$sat" -v k="$con" 'function cl(v) { return v < 0 ? 0 : (v > 1 ? 1 : v) }
+        BEGIN { n = 17; print "TITLE \"l2launch colour\""; print "LUT_3D_SIZE " n
+            for (b = 0; b < n; b++) for (g = 0; g < n; g++) for (r = 0; r < n; r++) {
+                R = (r/(n-1) - 0.5)*k + 0.5; G = (g/(n-1) - 0.5)*k + 0.5; B = (b/(n-1) - 0.5)*k + 0.5
+                L = 0.2126*R + 0.7152*G + 0.0722*B
+                printf "%.6f %.6f %.6f\n", cl(L + (R-L)*s), cl(L + (G-L)*s), cl(L + (B-L)*s) } }' \
+        > "$dir/colour.cube"
+    printf '%s\n' "# written by l2launch — change with --saturation / --contrast, not here" \
+        "effects = $fx" "lutFile = $dir/colour.cube" "casSharpness = $shp" "toggleKey = $key" \
+        > "$dir/vkBasalt.conf"
+    echo "$dir/vkBasalt.conf"
+}
+
 # ── run ─────────────────────────────────────────────────────────────────────
 run_umu() {  # args for umu-run
     local proton; proton=$(find_proton) || die "Proton not found"
@@ -315,6 +404,17 @@ run_umu() {  # args for umu-run
     [ "$fps" != "0" ] && export DXVK_FRAME_RATE="$fps"
     [ "$hud" = "on" ] && export DXVK_HUD="fps"
     [ "$mango" = "on" ] && export MANGOHUD=1
+    local vkb; vkb=$(onoff "${L2_VKBASALT:-$(conf_get VKBASALT off)}")
+    if [ "$vkb" = "on" ]; then
+        local bits; bits=$(exe_bits "$EXE")
+        vkb_has "${bits:-32}" || { warn "vkBasalt is on, but no ${bits:-32}-bit vkBasalt layer was found (L2.exe is ${bits:-32}-bit) — the picture stays unchanged:"; vkb_hint "${bits:-32}"; }
+        if VKBASALT_CONFIG_FILE=$(vkb_prepare); then
+            export ENABLE_VKBASALT=1 VKBASALT_CONFIG_FILE
+            say "vkBasalt on: saturation $(conf_get SATURATION 1.05), contrast $(conf_get CONTRAST 1.05), sharpness $(conf_get SHARPNESS 0.3) — $(conf_get VKBKEY Scroll_Lock) toggles it in game"
+        else
+            say "vkBasalt on, but saturation 1.0, contrast 1.0 and sharpness 0 change nothing — not loaded"
+        fi
+    fi
 
     mkdir -p "$PREFIX"
     cd "$(dirname "$EXE")"     # system/ or system-eu/ — the game expects its own folder as cwd
@@ -363,10 +463,19 @@ case "${1:-}" in
     --fps)
         v=$(fps_value "${2:-}"); [ -n "$v" ] || die "use --fps <15-1000> or --fps off"
         conf_set FPS "$([ "$v" = 0 ] && echo off || echo "$v")"; settings; exit 0 ;;
-    --hud|--mangohud|--multi)
+    --vkbasalt-key)
+        v="${2:-}"; [[ "$v" =~ ^[A-Za-z0-9_]+$ ]] || die "use --vkbasalt-key <X11 key name>, e.g. Scroll_Lock, Pause, F12"
+        conf_set VKBKEY "$v"; settings; exit 0 ;;
+    --sharpness)
+        v=$(sharp_value "${2:-}"); [ -n "$v" ] || die "use --sharpness <0-1>, 0 = off (e.g. --sharpness 0.3)"
+        conf_set SHARPNESS "$v"; settings; exit 0 ;;
+    --saturation|--contrast)
+        v=$(ratio_value "${2:-}"); [ -n "$v" ] || die "use $1 <0.5-2.0>, 1.0 = unchanged (e.g. $1 1.2)"
+        k=${1#--}; conf_set "${k^^}" "$v"; settings; exit 0 ;;
+    --hud|--mangohud|--multi|--vkbasalt)
         v=$(onoff "${2:-}"); [ -n "$v" ] || die "use $1 on or $1 off"
         k=${1#--}; conf_set "${k^^}" "$v"; settings; exit 0 ;;
-    --check)      check && say "all checks OK" || die "fix the warnings above first"; exit 0 ;;
+    --check)      CHECK_ONLY=1; check && say "all checks OK" || die "fix the warnings above first"; exit 0 ;;
     --desktop)    desktop; exit 0 ;;
     --reset-prefix)
         [ -d "$PREFIX" ] && mv "$PREFIX" "$PREFIX.old.$(date +%Y%m%d-%H%M%S)" && say "old prefix moved aside"

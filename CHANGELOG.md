@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0 (2026-11-02)
+
+- Colour fix with vkBasalt (optional): `--vkbasalt on|off`, `--saturation` and `--contrast` (0.5-2.0, default 1.05), `--sharpness` (AMD CAS, 0-1, default 0.3, 0 = off). The script writes a 17³ colour table (`colour.cube`) and `vkBasalt.conf` next to the settings on every start. Nothing neutral is loaded: at 1.0 / 1.0 / 0 vkBasalt stays off
+- `--vkbasalt-key` (default `Scroll_Lock`): key that switches the effect on/off in game, to compare. Not Home, L2 uses it for the camera
+- `--check` shows the vkBasalt layer in 64- and 32-bit (`found` / `missing`) and which one `L2.exe` needs, with the package names for Arch (AUR), Debian/Ubuntu and Fedora. With `--vkbasalt on` and the needed one missing, every start warns
+- `L2_VKBASALT=on|off` for one start; `--settings` shows the colour values
+
 ## 1.3.0 (2026-11-02)
 
 - Finds the client exe also in `system-*` folders (e.g. `system-eu` of EU clients), not only `system/`.
