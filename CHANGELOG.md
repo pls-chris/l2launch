@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.1 (2026-11-03)
+
+- Default on/off key for the colour fix is now `Delete` (was `Scroll_Lock`; many keyboards have no Scroll Lock). A key set with `--vkbasalt-key` stays as it is
+- Changing `--saturation`, `--contrast`, `--sharpness` or `--vkbasalt-key` while vkBasalt is off now says so (`--vkbasalt on` first); when it is on, it reminds that the game reads them at start
+
 ## 1.4.0 (2026-11-02)
 
 - Colour fix with vkBasalt (optional): `--vkbasalt on|off`, `--saturation` and `--contrast` (0.5-2.0, default 1.05), `--sharpness` (AMD CAS, 0-1, default 0.3, 0 = off). The script writes a 17³ colour table (`colour.cube`) and `vkBasalt.conf` next to the settings on every start. Nothing neutral is loaded: at 1.0 / 1.0 / 0 vkBasalt stays off

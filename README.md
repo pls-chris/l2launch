@@ -122,14 +122,14 @@ Settings are saved per client and used on every start:
 ./l2myserver.sh --saturation 1.05  # colour, 1.0 = unchanged (0.5-2.0), default 1.05
 ./l2myserver.sh --contrast 1.05    # contrast, 1.0 = unchanged (0.5-2.0), default 1.05
 ./l2myserver.sh --sharpness 0.3    # sharpening (AMD CAS), 0 = off (0-1), default 0.3
-./l2myserver.sh --vkbasalt-key Pause   # key that switches the effect on/off, default Scroll_Lock
+./l2myserver.sh --vkbasalt-key Pause   # key that switches the effect on/off, default Delete
 ./l2myserver.sh --title "My Server"
 ./l2myserver.sh --settings         # show what is set
 ```
 
 Why 60 by default: L2 does not need more, and without a limit the GPU can run at full power even in the character select screen (heat, fan noise, battery on laptops).
 
-**Colour fix.** Old L2 clients look pale on modern screens. With `--vkbasalt on` the script writes a small colour table (saturation + contrast) and a vkBasalt config next to the settings, and starts the game with the layer on. Press **Scroll Lock** in game to compare with and without (Home is a bad key: L2 uses it for the camera). Sharpening alone already makes textures look crisper, so the game looks better even at saturation 1.0 and contrast 1.0; `--sharpness 0` turns it off. If all three are neutral (1.0 / 1.0 / 0), vkBasalt is not loaded at all.
+**Colour fix.** Old L2 clients look pale on modern screens. With `--vkbasalt on` the script writes a small colour table (saturation + contrast) and a vkBasalt config next to the settings, and starts the game with the layer on. Press **Delete** in game to compare with and without (Home is a bad key: L2 uses it for the camera). Colour settings and the key are read when the game starts, so restart the game after a change. Sharpening alone already makes textures look crisper, so the game looks better even at saturation 1.0 and contrast 1.0; `--sharpness 0` turns it off. If all three are neutral (1.0 / 1.0 / 0), vkBasalt is not loaded at all.
 
 For one start only:
 
@@ -198,7 +198,7 @@ This turns off one of Ubuntu's security hardening options. Only do it if you nee
 
 **The camera spins by itself.** A gamepad, or something that looks like one (some headsets, drawing tablets), is read as a joystick. In game: Options → turn off **Support Gamepad**. Server owners can ship `UseJoystick=False` in `L2.ini` / `Option.ini`.
 
-**Colours look pale / washed out.** `--vkbasalt on` (see Settings). If nothing changes in game, run `--check`: most of the time the **32-bit** vkBasalt package is missing (`lib32-vkbasalt`, `vkbasalt:i386`, `vkBasalt.i686`). Scroll Lock switches the effect, so press it once in case it is just off.
+**Colours look pale / washed out.** `--vkbasalt on` (see Settings). If nothing changes in game, run `--check`: most of the time the **32-bit** vkBasalt package is missing (`lib32-vkbasalt`, `vkbasalt:i386`, `vkBasalt.i686`). Check `--settings` says `VKBASALT = on` — the key and the colour values do nothing while it is off. Delete switches the effect, so press it once in case it is just off.
 
 **It stays at "starting…" and nothing opens.** The script prints nothing more while the game runs. The game window may simply be on another workspace or monitor. Starting it again opens a second window (see multibox); `--kill` stops all of them, including a stuck start.
 

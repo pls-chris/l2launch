@@ -22,8 +22,8 @@
 #   --hud on|off                     fps counter in the corner (DXVK HUD)
 #   --mangohud on|off                MangoHud overlay (if installed)
 #   --vkbasalt on|off                colour fix: saturation/contrast + sharpening (vkBasalt layer,
-#                                    install it yourself, 64- and 32-bit; Scroll Lock = on/off in game)
-#   --vkbasalt-key Scroll_Lock       key that switches the effect on/off (X11 key name, e.g. Pause)
+#                                    install it yourself, 64- and 32-bit; Delete = on/off in game)
+#   --vkbasalt-key Delete            key that switches the effect on/off (X11 key name, e.g. Pause)
 #   --saturation 1.05                vkBasalt colour, 1.0 = unchanged (0.5-2.0), default 1.05
 #   --contrast 1.05                  vkBasalt contrast, 1.0 = unchanged (0.5-2.0), default 1.05
 #   --sharpness 0.3                  vkBasalt sharpening (CAS), 0 = off (0-1), default 0.3
@@ -50,7 +50,7 @@
 #        ~/.local/share/umu/      (Steam Linux Runtime, downloaded by umu-run)
 set -euo pipefail
 
-L2LAUNCH_VERSION="1.4.0"
+L2LAUNCH_VERSION="1.4.1"
 
 GE_VER="GE-Proton9-27"
 GE_URL="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${GE_VER}/${GE_VER}.tar.gz"
@@ -126,6 +126,14 @@ fps_value() {  # -> number, 0 = no limit, empty = invalid
     esac
 }
 
+vkb_note() {  # after changing a colour setting: remind that vkBasalt must be on + game restarted
+    if [ "$(onoff "$(conf_get VKBASALT off)")" != on ]; then
+        warn "vkBasalt is off, so this setting does nothing yet — turn it on: ./$(basename "$SELF") --vkbasalt on"
+    else
+        say "used from the next game start (restart the game if it runs)"
+    fi
+}
+
 settings() {
     local fps; fps=$(conf_get FPS 60)
     say "settings ($CONF):"
@@ -133,7 +141,7 @@ settings() {
     echo "  FPS      = $([ "$(fps_value "$fps")" = 0 ] && echo "off (no limit)" || echo "$fps")"
     echo "  HUD      = $(conf_get HUD off)"
     echo "  MANGOHUD = $(conf_get MANGOHUD off)"
-    echo "  VKBASALT = $(conf_get VKBASALT off)   (saturation $(conf_get SATURATION 1.05), contrast $(conf_get CONTRAST 1.05), sharpness $(conf_get SHARPNESS 0.3), key $(conf_get VKBKEY Scroll_Lock))"
+    echo "  VKBASALT = $(conf_get VKBASALT off)   (saturation $(conf_get SATURATION 1.05), contrast $(conf_get CONTRAST 1.05), sharpness $(conf_get SHARPNESS 0.3), key $(conf_get VKBKEY Delete))"
     echo "  MULTI    = $(conf_get MULTI on)   (next start opens another window)"
 }
 
@@ -367,7 +375,7 @@ vkb_hint() {  # bits — how to install vkBasalt
 vkb_prepare() {  # writes vkBasalt.conf + a colour LUT next to the settings, prints the conf path
     local dir sat con shp key
     dir="$(dirname "$CONF")"; mkdir -p "$dir"
-    key=$(conf_get VKBKEY Scroll_Lock); [[ "$key" =~ ^[A-Za-z0-9_]+$ ]] || key=Scroll_Lock
+    key=$(conf_get VKBKEY Delete); [[ "$key" =~ ^[A-Za-z0-9_]+$ ]] || key=Delete
     sat=$(ratio_value "$(conf_get SATURATION 1.05)"); [ -n "$sat" ] || sat=1.05
     con=$(ratio_value "$(conf_get CONTRAST 1.05)");   [ -n "$con" ] || con=1.05
     shp=$(sharp_value "$(conf_get SHARPNESS 0.3)");   [ -n "$shp" ] || shp=0.30
@@ -410,7 +418,7 @@ run_umu() {  # args for umu-run
         vkb_has "${bits:-32}" || { warn "vkBasalt is on, but no ${bits:-32}-bit vkBasalt layer was found (L2.exe is ${bits:-32}-bit) — the picture stays unchanged:"; vkb_hint "${bits:-32}"; }
         if VKBASALT_CONFIG_FILE=$(vkb_prepare); then
             export ENABLE_VKBASALT=1 VKBASALT_CONFIG_FILE
-            say "vkBasalt on: saturation $(conf_get SATURATION 1.05), contrast $(conf_get CONTRAST 1.05), sharpness $(conf_get SHARPNESS 0.3) — $(conf_get VKBKEY Scroll_Lock) toggles it in game"
+            say "vkBasalt on: saturation $(conf_get SATURATION 1.05), contrast $(conf_get CONTRAST 1.05), sharpness $(conf_get SHARPNESS 0.3) — $(conf_get VKBKEY Delete) toggles it in game"
         else
             say "vkBasalt on, but saturation 1.0, contrast 1.0 and sharpness 0 change nothing — not loaded"
         fi
@@ -464,14 +472,14 @@ case "${1:-}" in
         v=$(fps_value "${2:-}"); [ -n "$v" ] || die "use --fps <15-1000> or --fps off"
         conf_set FPS "$([ "$v" = 0 ] && echo off || echo "$v")"; settings; exit 0 ;;
     --vkbasalt-key)
-        v="${2:-}"; [[ "$v" =~ ^[A-Za-z0-9_]+$ ]] || die "use --vkbasalt-key <X11 key name>, e.g. Scroll_Lock, Pause, F12"
-        conf_set VKBKEY "$v"; settings; exit 0 ;;
+        v="${2:-}"; [[ "$v" =~ ^[A-Za-z0-9_]+$ ]] || die "use --vkbasalt-key <X11 key name>, e.g. Delete, Pause, Scroll_Lock, F12"
+        conf_set VKBKEY "$v"; settings; vkb_note; exit 0 ;;
     --sharpness)
         v=$(sharp_value "${2:-}"); [ -n "$v" ] || die "use --sharpness <0-1>, 0 = off (e.g. --sharpness 0.3)"
-        conf_set SHARPNESS "$v"; settings; exit 0 ;;
+        conf_set SHARPNESS "$v"; settings; vkb_note; exit 0 ;;
     --saturation|--contrast)
         v=$(ratio_value "${2:-}"); [ -n "$v" ] || die "use $1 <0.5-2.0>, 1.0 = unchanged (e.g. $1 1.2)"
-        k=${1#--}; conf_set "${k^^}" "$v"; settings; exit 0 ;;
+        k=${1#--}; conf_set "${k^^}" "$v"; settings; vkb_note; exit 0 ;;
     --hud|--mangohud|--multi|--vkbasalt)
         v=$(onoff "${2:-}"); [ -n "$v" ] || die "use $1 on or $1 off"
         k=${1#--}; conf_set "${k^^}" "$v"; settings; exit 0 ;;
