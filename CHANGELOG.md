@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0 (2026-11-02)
+
+- Finds the client exe also in `system-*` folders (e.g. `system-eu` of EU clients), not only `system/`.
+- Starts the exe from its own folder, so clients with a renamed system folder load their files.
+
 ## 1.2.0 — 2026-10-24
 
 - Start it again (terminal or menu entry) while it runs → the next window opens (box 2, 3 ... up to 9), like on Windows. `--multi off` brings back "already running"
