@@ -2,8 +2,8 @@
 # l2launch — start a Lineage II client on Linux without Steam
 # https://github.com/pls-chris/l2launch   (MIT, Christoforos Pliatsikas)
 #
-# Put this file in the client folder (next to system/), name it after the
-# server (l2myserver.sh) and run it:
+# Put this file in the client folder (next to system/, or system-eu/ on EU
+# clients), name it after the server (l2myserver.sh) and run it:
 #   ./l2myserver.sh                  play
 #   ./l2myserver.sh --check          only check this PC (nothing is downloaded)
 #   ./l2myserver.sh --desktop        add it to the application menu
@@ -44,7 +44,7 @@
 #        ~/.local/share/umu/      (Steam Linux Runtime, downloaded by umu-run)
 set -euo pipefail
 
-L2LAUNCH_VERSION="1.2.0"
+L2LAUNCH_VERSION="1.3.0"
 
 GE_VER="GE-Proton9-27"
 GE_URL="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${GE_VER}/${GE_VER}.tar.gz"
@@ -130,10 +130,14 @@ use_box() {  # "" = window 1, 2-9 = boxes
 }
 use_box "$BOX"
 
-find_exe() {  # system/L2.exe, any case (some clients ship l2.exe)
-    local f
-    for f in "$CLIENT"/system/*; do
-        case "${f##*/}" in [Ll]2.[Ee][Xx][Ee]) echo "$f"; return 0 ;; esac
+find_exe() {  # system/L2.exe, any case (some clients ship l2.exe);
+              # EU clients keep it in system-eu/ (their l2.ini says ../System-eu)
+    local d f
+    for d in "$CLIENT"/[Ss]ystem "$CLIENT"/[Ss]ystem-*; do
+        [ -d "$d" ] || continue
+        for f in "$d"/*; do
+            case "${f##*/}" in [Ll]2.[Ee][Xx][Ee]) echo "$f"; return 0 ;; esac
+        done
     done
     return 1
 }
@@ -203,7 +207,7 @@ check() {
         fi
     fi
 
-    [ -n "$EXE" ] || { warn "no system/L2.exe in $CLIENT — put this script in the client folder"; bad=1; }
+    [ -n "$EXE" ] || { warn "no system/L2.exe (or system-eu/L2.exe) in $CLIENT — put this script in the client folder"; bad=1; }
 
     mkdir -p "$DATA" "$TOOLS"
     local free; free=$(df -Pm "$TOOLS" | awk 'NR==2 {print $4}')
@@ -313,7 +317,7 @@ run_umu() {  # args for umu-run
     [ "$mango" = "on" ] && export MANGOHUD=1
 
     mkdir -p "$PREFIX"
-    cd "$CLIENT/system"
+    cd "$(dirname "$EXE")"     # system/ or system-eu/ — the game expects its own folder as cwd
     [ -d "${XDG_DATA_HOME:-$HOME/.local/share}/umu/steamrt3" ] || \
         say "first start: umu-run downloads the Steam Linux Runtime (~200 MB), this takes some minutes"
     say "starting (fps limit: ${DXVK_FRAME_RATE:-off}), log: $LOG"
