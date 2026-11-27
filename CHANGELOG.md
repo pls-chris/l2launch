@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.2 (2026-11-27)
+
+- `--kill` and the start check also find Wine processes that stay behind. Closing the terminal ends `L2.exe`, but its wineserver can stay in the prefix; 1.4.1 looked only for the umu-run process, so `--kill` said "not running" and the next start waited behind the old wineserver (looked like a hang). Now every process of the prefix counts (`WINEPREFIX` / `STEAM_COMPAT_DATA_PATH`; Proton runs Wine in `<prefix>/pfx/`)
+- The running check reads `/proc/<pid>/environ` without a pipe: with `pipefail`, a `tr | grep -q` that stopped early could miss a running game
+- "not running" says which folder was checked
+
 ## 1.4.1 (2026-11-03)
 
 - Default on/off key for the colour fix is now `Delete` (was `Scroll_Lock`; many keyboards have no Scroll Lock). A key set with `--vkbasalt-key` stays as it is

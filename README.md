@@ -140,7 +140,7 @@ L2_VKBASALT=off ./l2myserver.sh               # once without the colour fix
 L2_CLIENT=/path/to/client ./l2myserver.sh     # script not inside the client folder
 ```
 
-Other commands: `--box N` (exactly window N, see above), `--kill` (stop all windows, also stuck starts), `--winecfg` (Wine settings of this client's prefix), `--reset-prefix` (fresh prefix, the old one is kept aside), `--version`, `--help`.
+Other commands: `--box N` (exactly window N, see above), `--kill` (stop all windows, also stuck starts and Wine left behind by a closed terminal), `--winecfg` (Wine settings of this client's prefix), `--reset-prefix` (fresh prefix, the old one is kept aside), `--version`, `--help`.
 
 ---
 
@@ -201,6 +201,10 @@ This turns off one of Ubuntu's security hardening options. Only do it if you nee
 **Colours look pale / washed out.** `--vkbasalt on` (see Settings). If nothing changes in game, run `--check`: most of the time the **32-bit** vkBasalt package is missing (`lib32-vkbasalt`, `vkbasalt:i386`, `vkBasalt.i686`). Check `--settings` says `VKBASALT = on` — the key and the colour values do nothing while it is off. Delete switches the effect, so press it once in case it is just off.
 
 **It stays at "starting…" and nothing opens.** The script prints nothing more while the game runs. The game window may simply be on another workspace or monitor. Starting it again opens a second window (see multibox); `--kill` stops all of them, including a stuck start.
+
+**The terminal stays busy while you play.** That is normal: the script waits for the game and ends when the game closes. If you close the terminal, the game closes too, but Wine can stay behind in the background; the next start then waits for it and looks stuck. `--kill` cleans that up (since 1.4.2).
+
+**The window opens on the wrong monitor, at a strange place or with a strange size** (several monitors). Wine places the game by XWayland's *primary* monitor, and XWayland may have none, or lay the monitors out differently than your desktop. `xrandr --listmonitors` shows its layout (`*` = primary); set it with `xrandr --output <name> --primary` and add that line to your compositor's autostart (it is lost when the compositor restarts). The client saves its window size and place on exit in `Option.ini` in its system folder (`GamePlayViewportX/Y` = size, `GamePlayViewportStartX/Y` = place, counted from the primary monitor's top-left corner): change the size in game, or edit those lines with the game closed. A compositor rule that sets the window size has no effect, the client sets its own size after it.
 
 **It stopped starting after it worked before.** `--reset-prefix`, then start again. The old prefix is kept as `prefix.old.<date>`.
 
