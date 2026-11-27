@@ -9,7 +9,8 @@
 #   ./l2myserver.sh --desktop        add it to the application menu
 #   ./l2myserver.sh --winecfg        Wine settings of this client's prefix
 #   ./l2myserver.sh --reset-prefix   start with a new prefix (old one is kept aside)
-#   ./l2myserver.sh --kill           stop all windows of this client (also stuck starts)
+#   ./l2myserver.sh --kill           stop all windows of this client (also stuck starts and
+#                                    a game whose terminal was closed)
 #
 # More windows (multibox): start it again — while window 1 runs, the next start
 # opens window 2, then 3 ... (each with its own prefix). Same from the menu entry.
@@ -50,7 +51,7 @@
 #        ~/.local/share/umu/      (Steam Linux Runtime, downloaded by umu-run)
 set -euo pipefail
 
-L2LAUNCH_VERSION="1.4.1"
+L2LAUNCH_VERSION="1.4.2"
 
 GE_VER="GE-Proton9-27"
 GE_URL="https://github.com/GloriousEggroll/proton-ge-custom/releases/download/${GE_VER}/${GE_VER}.tar.gz"
@@ -305,13 +306,21 @@ get_umu() {
 }
 
 # ── running instance ────────────────────────────────────────────────────────
-running_pids() {  # umu-run processes that use a prefix (default: this box's)
-    local want="${1:-$PREFIX}" pid argv0
-    for pid in $(pgrep -f -- "umu-run" 2>/dev/null); do
-        # only the python process itself, not a shell or grep that has the text
-        argv0=$(tr '\0' '\n' < "/proc/$pid/cmdline" 2>/dev/null | head -n 1)
-        case "$argv0" in *python*) ;; *) continue ;; esac
-        tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null | grep -qxF "WINEPREFIX=$want" && echo "$pid"
+running_pids() {  # processes of this user that run in a prefix (default: this box's): the
+                  # umu-run wrapper and the Wine processes (L2.exe, wineserver ...), so a game
+                  # whose terminal was closed is found too. No pipes: with pipefail a
+                  # `tr | grep -q` that stopped early made the check miss the game now and then.
+    local want="${1:-$PREFIX}" pid v
+    local -a env
+    for pid in $(pgrep -u "$(id -u)" -f -- 'umu-run|wineserver|\.[Ee][Xx][Ee]' 2>/dev/null); do
+        env=()
+        mapfile -d '' -t env < "/proc/$pid/environ" 2>/dev/null || continue
+        for v in "${env[@]}"; do
+            case "$v" in
+                "WINEPREFIX=$want"|"WINEPREFIX=$want/"|"STEAM_COMPAT_DATA_PATH=$want"|"STEAM_COMPAT_DATA_PATH=$want/")
+                    echo "$pid"; break ;;
+            esac
+        done
     done
     return 0
 }
@@ -339,7 +348,7 @@ kill_client() {  # this box with --box N, otherwise every window of the client
         [ -z "$pids" ] || kill -9 $pids 2>/dev/null || true
     done
     [ "$BOX_SET" = 1 ] || use_box ""
-    if [ "$any" = 1 ]; then say "stopped"; else say "not running"; fi
+    if [ "$any" = 1 ]; then say "stopped"; else say "not running (no process uses a prefix in $DATA)"; fi
 }
 
 # ── vkBasalt colour fix ─────────────────────────────────────────────────────
